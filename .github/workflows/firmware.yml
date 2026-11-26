@@ -13,6 +13,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.value }}
     steps:
       - uses: actions/checkout@v4
       - uses: arduino/setup-arduino-cli@v2
@@ -24,11 +26,15 @@ jobs:
         run: |
           arduino-cli core update-index --additional-urls "$ESP32_INDEX"
           arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$ESP32_INDEX"
-      - name: Verify release tag
-        if: github.ref_type == 'tag'
+      - name: Read firmware version
+        id: version
         run: |
           version=$(sed -nE 's/^#define TRACKER_VERSION "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' firmware/TrackerOTA/Version.h)
-          test -n "$version" && test "$GITHUB_REF_NAME" = "v$version"
+          test -n "$version"
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            test "$GITHUB_REF_NAME" = "v$version"
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
       - name: Build firmware
         run: |
           arduino-cli compile \
@@ -45,8 +51,10 @@ jobs:
 
   release:
     needs: build
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: github.event_name == 'push' && (github.ref_type == 'tag' || (github.ref == 'refs/heads/main' && needs.build.outputs.version == '1.0.0'))
     runs-on: ubuntu-24.04
+    concurrency:
+      group: firmware-release-${{ needs.build.outputs.version }}
     permissions:
       contents: write
     steps:
@@ -56,7 +64,18 @@ jobs:
       - name: Publish the verified build as a GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          FIRMWARE_VERSION: ${{ needs.build.outputs.version }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
-            --title "Dog Tracker $GITHUB_REF_NAME" --generate-notes --latest \
+          tag="v$FIRMWARE_VERSION"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json tagName >/dev/null 2>&1; then
+            echo "Release $tag already exists."
+            exit 0
+          fi
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            tag_args=(--verify-tag)
+          else
+            tag_args=(--target "$GITHUB_SHA")
+          fi
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" "${tag_args[@]}" \
+            --title "Dog Tracker $tag" --generate-notes --latest \
             heltec-wireless-tracker-v2-ota.bin heltec-wireless-tracker-v2-usb.bin
