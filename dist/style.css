@@ -16,7 +16,12 @@ h2, summary { font-size: 1.05rem; font-weight: 700; }
 main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 23rem); gap: 1rem; }
 .map-panel, aside { border: 1px solid #cddbd4; border-radius: 1rem; overflow: hidden; background: #fff; }
 .map-panel { position: relative; min-height: 31rem; }
-#map { position: absolute; inset: 0; background: #dceae4; }
+#map { position: absolute; inset: 0; z-index: 0; background: #dceae4; }
+#map-view { position: absolute; z-index: 500; top: .625rem; right: .625rem; padding: .2rem; border-radius: .75rem; background: #fff; box-shadow: 0 1px 5px #162d2650; }
+#map-view:not([hidden]) { display: flex; gap: .2rem; }
+#map-view button { min-height: 44px; color: #204638; background: #fff; }
+#map-view button[aria-pressed="true"] { color: #fff; background: #0d5c43; }
+#map-view button:focus-visible { outline-offset: -3px; outline-color: currentColor; }
 #map-notice { position: absolute; z-index: 500; bottom: 1.5rem; left: 1rem; right: 1rem; width: fit-content; max-width: calc(100% - 2rem); padding: .5rem .75rem; border-radius: .5rem; background: #fff; }
 aside section { padding: 1.15rem; }
 aside section + section { border-top: 1px solid #dce5e0; }

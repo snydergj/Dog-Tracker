@@ -1,6 +1,8 @@
 # Dog Tracker
 
-A local browser app for checking a Heltec Wireless Tracker V2 over USB. It shows the latest position, recent trail and serial output. The demo uses a sample route. Position data stays in browser memory. The map loads tiles from OpenStreetMap, which receives tile requests for the area being viewed.
+A local browser app for checking a Heltec Wireless Tracker V2 over USB. It shows the latest position, recent trail and serial output. The demo uses a sample route. Position data stays in browser memory.
+
+Use **Street** or **Satellite** in the top-right corner of the map. Satellite view uses [USGS National Map aerial imagery](https://www.usgs.gov/faqs/what-are-base-map-services-or-urls-used-national-map) for U.S. coverage. The tracker pin, trail and geofence work in either view. OpenStreetMap and USGS receive tile requests for the area being viewed when their respective layer is active.
 
 ## Wi-Fi setup and automatic updates
 

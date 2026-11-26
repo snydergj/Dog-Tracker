@@ -17,6 +17,10 @@
   <main>
     <section class="map-panel" aria-label="Tracker map">
       <div id="map"></div>
+      <div id="map-view" role="group" aria-label="Map view" hidden>
+        <button type="button" value="street" aria-pressed="true">Street</button>
+        <button type="button" value="satellite" aria-pressed="false">Satellite</button>
+      </div>
       <p id="map-notice" role="status" hidden></p>
     </section>
     <aside aria-label="Tracker controls and GPS readings">

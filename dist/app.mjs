@@ -7,17 +7,46 @@ const overview = [39, -96];
 const map = leaflet?.map(ui.map).setView(overview, 4);
 const mapNotice = ui['map-notice'];
 if (map) {
-  const tiles = leaflet.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  }).addTo(map);
-  tiles.on('tileerror', () => {
-    mapNotice.textContent = 'Map tiles are unavailable. GPS readings still work.';
-    mapNotice.hidden = false;
-  });
-  tiles.on('load', () => {
-    mapNotice.hidden = Boolean(ui.map.querySelector('.leaflet-tile-loaded'));
-  });
+  const basemaps = {
+    street: leaflet.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }),
+    satellite: leaflet.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      maxNativeZoom: 16,
+      attribution: 'USDA, <a href="https://www.usgs.gov/programs/national-geospatial-program/national-map">USGS The National Map</a>',
+    }),
+  };
+  const viewControl = ui['map-view'];
+  const viewButtons = [...viewControl.querySelectorAll('button')];
+  let activeView;
+
+  function switchView(view) {
+    if (view === activeView) return;
+    if (activeView) basemaps[activeView].remove();
+    activeView = view;
+    mapNotice.hidden = true;
+    basemaps[view].addTo(map);
+    for (const button of viewButtons) {
+      button.setAttribute('aria-pressed', String(button.value === view));
+    }
+  }
+
+  for (const [view, tiles] of Object.entries(basemaps)) {
+    tiles.on('load', () => {
+      if (view !== activeView) return;
+      mapNotice.hidden = Boolean(tiles.getContainer().querySelector('.leaflet-tile-loaded'));
+      mapNotice.textContent = view === 'satellite'
+        ? 'Satellite imagery is unavailable here. Switch to Street to try the street map.'
+        : 'Map tiles are unavailable. GPS readings still work.';
+    });
+  }
+  for (const button of viewButtons) {
+    button.addEventListener('click', () => switchView(button.value));
+  }
+  switchView('street');
+  viewControl.hidden = false;
 } else {
   mapNotice.textContent = 'Map library could not load. GPS readings still work.';
   mapNotice.hidden = false;
