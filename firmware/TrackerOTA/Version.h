@@ -1,3 +1,3 @@
 #pragma once
 
-#define TRACKER_VERSION "1.0.1"
+#define TRACKER_VERSION "1.0.2"

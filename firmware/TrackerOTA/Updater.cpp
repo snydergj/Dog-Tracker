@@ -51,6 +51,8 @@ bool get(Response &response, const char *url, const char *token, const char *acc
   config.url = url;
   config.crt_bundle_attach = esp_crt_bundle_attach;
   config.disable_auto_redirect = true;
+  // GitHub's signed asset URL must fit in the HTTP request's first line.
+  config.buffer_size_tx = 4096;
   config.timeout_ms = 7000;
   config.user_agent = "DogTracker-ESP32S3/" TRACKER_VERSION;
   config.event_handler = onHeader;
@@ -62,7 +64,11 @@ bool get(Response &response, const char *url, const char *token, const char *acc
     const String authorization = String("Bearer ") + token;
     if (esp_http_client_set_header(response.client, "Authorization", authorization.c_str()) != ESP_OK) return false;
   }
-  if (esp_http_client_open(response.client, 0) != ESP_OK) return false;
+  const esp_err_t opened = esp_http_client_open(response.client, 0);
+  if (opened != ESP_OK) {
+    Serial.printf("\nOTA could not open HTTPS request (%s).\n", esp_err_to_name(opened));
+    return false;
+  }
   response.length = esp_http_client_fetch_headers(response.client);
   response.status = esp_http_client_get_status_code(response.client);
   return response.length >= 0 && response.status > 0;
@@ -144,6 +150,10 @@ bool install(Response &response, const Candidate &candidate) {
   if (complete) {
     for (size_t i = 0; i < sizeof(bytes); ++i) snprintf(hex + i * 2, 3, "%02x", bytes[i]);
     if (strcmp(hex, candidate.digest) == 0 && Update.end()) return true;
+    Serial.println("\nOTA image checksum or activation failed.");
+  } else {
+    Serial.printf("\nOTA image incomplete (%u of %u bytes).\n", static_cast<unsigned>(received),
+                  static_cast<unsigned>(candidate.size));
   }
   Update.abort();
   return false;
@@ -153,7 +163,7 @@ bool install(Response &response, const Candidate &candidate) {
 void checkForTrackerUpdate(const char *token) {
   const Candidate candidate = latestRelease(token);
   if (!candidate.id) return;
-  Serial.println("OTA downloading a newer release.");
+  Serial.println("\nOTA downloading a newer release.");
   char url[150];
   snprintf(url, sizeof(url), "%sassets/%llu", kReleaseApi, static_cast<unsigned long long>(candidate.id));
   String redirect;
@@ -172,9 +182,9 @@ void checkForTrackerUpdate(const char *token) {
     if (get(asset, redirect.c_str(), nullptr, "application/octet-stream")) installed = install(asset, candidate);
   }
   if (installed) {
-    Serial.println("OTA verified. Restarting.");
+    Serial.println("\nOTA verified. Restarting.");
     delay(300);
     ESP.restart();
   }
-  Serial.println("OTA download or verification failed. The current firmware is still active.");
+  Serial.println("\nOTA download or verification failed. The current firmware is still active.");
 }
