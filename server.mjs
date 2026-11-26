@@ -6,6 +6,7 @@ const files = new Map([
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
   ['/app.mjs', ['app.mjs', 'text/javascript; charset=utf-8']],
   ['/gps.mjs', ['gps.mjs', 'text/javascript; charset=utf-8']],
+  ['/geofence.mjs', ['geofence.mjs', 'text/javascript; charset=utf-8']],
 ]);
 
 createServer(async (request, response) => {

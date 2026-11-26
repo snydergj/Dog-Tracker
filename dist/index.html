@@ -49,6 +49,18 @@
         <button type="button" id="center" class="secondary" disabled>Center on latest fix</button>
       </section>
       <section>
+        <h2>Geofence</h2>
+        <p id="fence-status" class="fence-status" role="status">Draw a boundary on the map for on-screen alerts.</p>
+        <div class="actions">
+          <button type="button" id="draw-fence" class="secondary">Draw fence</button>
+          <button type="button" id="save-fence" hidden>Save fence</button>
+          <button type="button" id="undo-corner" class="secondary" hidden>Undo corner</button>
+          <button type="button" id="cancel-fence" class="secondary" hidden>Cancel</button>
+          <button type="button" id="show-fence" class="secondary" hidden>Show fence</button>
+          <button type="button" id="remove-fence" class="secondary" hidden>Remove fence</button>
+        </div>
+      </section>
+      <section>
         <details open>
           <summary>Serial output</summary>
           <pre id="log" aria-label="Recent serial lines" tabindex="0">No data received.</pre>

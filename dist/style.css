@@ -21,6 +21,9 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 23rem)
 aside section { padding: 1.15rem; }
 aside section + section { border-top: 1px solid #dce5e0; }
 aside p { margin-top: .45rem; color: #435c53; }
+.fence-status[data-state="outside"] { background: #fde5df; color: #861f12; padding: .5rem .65rem; border-radius: .45rem; font-weight: 700; }
+.fence-status[data-state="inside"] { color: #0d5c43; font-weight: 650; }
+#map[data-drawing="true"] { cursor: crosshair; }
 .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .9rem; }
 button { font: inherit; font-weight: 650; font-size: .9rem; padding: .55rem .8rem; border: 1px solid transparent; border-radius: .55rem; color: #fff; background: #0d5c43; cursor: pointer; }
 button:hover:not(:disabled) { filter: brightness(.92); }

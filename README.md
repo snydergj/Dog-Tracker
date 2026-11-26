@@ -42,6 +42,16 @@ The factory flash backup for this tracker is in `.tracker-backups/`. To restore 
 
 For a standalone field test, use a second compatible LoRa node as the receiver. Match the radio band for both boards and use the region setting for your location. One route is the **Heltec Wireless Tracker V2** Meshtastic target on the tracker and a compatible Meshtastic node connected to your phone or PC. Test a position packet across the room, then move the tracker outdoors and increase distance gradually. This app currently uses USB, so bringing LoRa positions into it requires a receiver integration.
 
+For a Raspberry Pi base station, record the exact LoRa HAT model, radio chip, band, and whether its interface is SPI or UART. The Pi radio code will depend on those details. A compatible receiver will supply positions to this map and the touchscreen can show the latest fix and its age.
+
+## Draw a geofence
+
+1. Zoom the map to the property and choose **Draw fence**.
+2. Tap at least three corners in boundary order and choose **Save fence**. The browser stores the boundary locally. Use **Show fence** to return to it or **Redraw fence** to replace it.
+3. Keep the app open with a live GPS source. The display flags an outside position after three seconds of continued outside readings. If updates stop or GPS loses its fix, the app waits for a fresh reading.
+
+**Try demo** can check the outline against the example route. Its results are labeled as simulated. The fence is an on-screen alert and physical containment is still needed.
+
 - [Heltec Wireless Tracker V2 docs](https://wiki.heltec.org/docs/devices/open-source-hardware/esp32-series/lora-32/wireless-tracker-v2/)
 - [Heltec GNSS reception troubleshooting](https://heltec.org/project/wireless-tracker-v2/#faq)
 - [Heltec V2 factory test source](https://github.com/HelTecAutomation/Heltec_ESP32/blob/master/examples/Factory_Test/Wireless_Tracker_V2_FactoryTest/Wireless_Tracker_V2_FactoryTest.ino)

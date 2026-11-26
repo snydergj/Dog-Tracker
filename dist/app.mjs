@@ -1,4 +1,5 @@
 import { parseGpsLine } from './gps.mjs';
+import { insideFence, trackFenceCrossings, validFence } from './geofence.mjs';
 
 const ui = Object.fromEntries([...document.querySelectorAll('[id]')].map(element => [element.id, element]));
 const leaflet = window.L;
@@ -36,6 +37,134 @@ let fixLost = false;
 let demoTimer;
 let active;
 let setupNoticeAt = 0;
+const fenceStorageKey = 'dog-tracker:geofence';
+const fenceCrossings = trackFenceCrossings();
+let fence = readFence();
+let draftFence;
+let fenceLayer;
+
+function readFence() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(fenceStorageKey));
+    return validFence(saved) ? saved : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function fenceStatus(message, state = '') {
+  const status = ui['fence-status'];
+  if (status.textContent !== message) status.textContent = message;
+  status.dataset.state = state;
+}
+
+function resetFenceMonitor() {
+  fenceCrossings.reset();
+  if (draftFence) return;
+  if (!map) fenceStatus('The map needs to load before you can draw a geofence.');
+  else if (fence) fenceStatus('Waiting for a fresh GPS position.');
+  else fenceStatus('Draw a boundary on the map for on-screen alerts.');
+}
+
+function evaluateFence(point) {
+  if (!fence || draftFence) return;
+  const inside = insideFence(point, fence);
+  if (demoTimer) {
+    fenceStatus(inside ? 'Demo location is inside the fence.' : 'Demo location is outside the fence.');
+    return;
+  }
+  const state = fenceCrossings.sample(inside, performance.now());
+  const messages = {
+    inside: 'Tracker is inside the fence.',
+    checking: 'Checking a possible boundary crossing…',
+    outside: 'Geofence alert: tracker is outside the boundary.',
+  };
+  fenceStatus(messages[state], state);
+}
+
+function renderFence() {
+  const drawing = Boolean(draftFence);
+  ui['draw-fence'].hidden = drawing;
+  ui['draw-fence'].disabled = !map;
+  ui['draw-fence'].textContent = fence ? 'Redraw fence' : 'Draw fence';
+  for (const key of ['save-fence', 'undo-corner', 'cancel-fence']) ui[key].hidden = !drawing;
+  ui['save-fence'].disabled = !draftFence || draftFence.length < 3;
+  ui['undo-corner'].disabled = !draftFence?.length;
+  for (const key of ['show-fence', 'remove-fence']) ui[key].hidden = drawing || !fence || !map;
+  ui.map.dataset.drawing = drawing;
+  fenceLayer?.remove();
+  fenceLayer = undefined;
+
+  const points = draftFence ?? fence;
+  if (!map || !points?.length) return;
+  const color = drawing ? '#265da6' : '#0a7453';
+  const options = { color, fillOpacity: .12, weight: 3, interactive: false };
+  fenceLayer = leaflet.layerGroup().addTo(map);
+  if (points.length >= 3) leaflet.polygon(points, options).addTo(fenceLayer);
+  else if (points.length === 2) leaflet.polyline(points, options).addTo(fenceLayer);
+  if (drawing) {
+    for (const point of points) leaflet.circleMarker(point, { ...options, radius: 4, fillOpacity: 1 }).addTo(fenceLayer);
+  }
+}
+
+function finishFenceEdit() {
+  draftFence = undefined;
+  renderFence();
+  resetFenceMonitor();
+  const fresh = !fixLost && lastFixAt !== null && Date.now() - lastFixAt <= 10000;
+  if ((demoTimer || (active && fresh)) && trail.length) evaluateFence(trail.at(-1));
+}
+
+ui['draw-fence'].addEventListener('click', () => {
+  draftFence = [];
+  fenceCrossings.reset();
+  fenceStatus('Tap the map to add corners in boundary order. Add at least three.');
+  renderFence();
+});
+map?.on('click', ({ latlng }) => {
+  if (!draftFence) return;
+  if (draftFence.length === 40) {
+    fenceStatus('A fence can have up to 40 corners.');
+    return;
+  }
+  const { lat, lng } = latlng.wrap();
+  draftFence.push([lat, lng]);
+  fenceStatus(`${draftFence.length} ${draftFence.length === 1 ? 'corner' : 'corners'}. Tap another corner or save the fence.`);
+  renderFence();
+});
+ui['undo-corner'].addEventListener('click', () => {
+  draftFence.pop();
+  fenceStatus('Tap the map to add corners in boundary order. Add at least three.');
+  renderFence();
+});
+ui['cancel-fence'].addEventListener('click', finishFenceEdit);
+ui['save-fence'].addEventListener('click', () => {
+  if (!validFence(draftFence)) {
+    fenceStatus('Use distinct corners around a single boundary with no crossing edges.');
+    return;
+  }
+  try {
+    localStorage.setItem(fenceStorageKey, JSON.stringify(draftFence));
+  } catch {
+    fenceStatus('This browser could not save the fence. Check its site storage settings.');
+    return;
+  }
+  fence = draftFence;
+  finishFenceEdit();
+});
+ui['show-fence'].addEventListener('click', () => map.fitBounds(fence, { padding: [24, 24], maxZoom: 19 }));
+ui['remove-fence'].addEventListener('click', () => {
+  try {
+    localStorage.removeItem(fenceStorageKey);
+  } catch {
+    fenceStatus('This browser could not remove the saved fence.');
+    return;
+  }
+  fence = undefined;
+  finishFenceEdit();
+});
+renderFence();
+resetFenceMonitor();
 
 function showConnection(source, message) {
   ui.source.textContent = source;
@@ -50,6 +179,7 @@ function clearTrack() {
   trail.length = lines.length = 0;
   lastFixAt = null;
   fixLost = false;
+  resetFenceMonitor();
   for (const key of ['latitude', 'longitude', 'satellites', 'updated']) ui[key].textContent = '—';
   ui.fix.textContent = 'Waiting for a position.';
   ui.log.textContent = 'No data received.';
@@ -61,6 +191,7 @@ function updateFixStatus() {
   if (setupNoticeAt && Date.now() - setupNoticeAt > 25000) clearWifiSetup();
   const stale = lastFixAt !== null && Date.now() - lastFixAt > 10000;
   const old = !demoTimer && (fixLost || stale);
+  if (!demoTimer && (!active || old || lastFixAt === null)) resetFenceMonitor();
   marker?.setStyle({ fillColor: old || (!active && !demoTimer) ? '#a06a1b' : '#127550' });
   if (lastFixAt === null) {
     ui.fix.textContent = fixLost ? 'GPS is searching for satellites. Try a clear view of the sky.' : 'Waiting for a position.';
@@ -96,6 +227,7 @@ function showPosition(reading) {
     ui.latitude.textContent = latitude.toFixed(6);
     ui.longitude.textContent = longitude.toFixed(6);
     ui.updated.textContent = new Date(lastFixAt).toLocaleTimeString();
+    evaluateFence(point);
   }
   updateFixStatus();
 }
