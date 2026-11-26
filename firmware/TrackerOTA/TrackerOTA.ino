@@ -4,8 +4,10 @@
 #include <WiFi.h>
 #include <esp_random.h>
 
-#include "Version.h"
+#include "GpsStatus.h"
+#include "TrackerDisplay.h"
 #include "Updater.h"
+#include "Version.h"
 
 namespace {
 constexpr int kGnssPower = 3;
@@ -25,6 +27,7 @@ struct Settings {
 Settings settings{};
 Preferences storage;
 WebServer portal(80);
+GpsStatus gpsStatus;
 bool connecting = false;
 bool portalOpen = false;
 bool checkedForUpdate = false;
@@ -151,6 +154,20 @@ void serviceNetwork() {
     if (!portalOpen && storage.putBool("setup", true)) ESP.restart();
   }
 }
+
+void refreshDashboard(uint32_t now) {
+  static uint32_t drawnAt = 0;
+  if (now - drawnAt < 1000) return;
+  drawnAt = now;
+
+  const time_t systemTime = time(nullptr);
+  const int utc = systemTime >= 1700000000 ? static_cast<int>(systemTime % 86400) : gpsStatus.secondsUtc(now);
+  DisplayNetwork network = DisplayNetwork::Offline;
+  if (portalOpen) network = DisplayNetwork::Setup;
+  else if (connecting) network = DisplayNetwork::Joining;
+  else if (WiFi.status() == WL_CONNECTED) network = DisplayNetwork::Connected;
+  drawTrackerDisplay({utc, gpsStatus.satellites(now), gpsStatus.hasFix(now), temperatureRead(), network});
+}
 }
 
 void setup() {
@@ -158,7 +175,9 @@ void setup() {
   Serial.printf("Dog Tracker firmware %s\n", TRACKER_VERSION);
   pinMode(kGnssPower, OUTPUT);
   digitalWrite(kGnssPower, HIGH);
+  Serial1.setRxBufferSize(2048);
   Serial1.begin(kBaud, SERIAL_8N1, kGnssRx, kGnssTx);
+  startTrackerDisplay();
   pinMode(kUserButton, INPUT_PULLUP);
   buttonDown = millis();
 
@@ -180,9 +199,13 @@ void setup() {
 }
 
 void loop() {
+  const uint32_t now = millis();
   for (int remaining = 256; remaining > 0 && Serial1.available(); --remaining) {
-    Serial.write(static_cast<uint8_t>(Serial1.read()));
+    const uint8_t character = Serial1.read();
+    Serial.write(character);
+    gpsStatus.consume(static_cast<char>(character), now);
   }
   serviceNetwork();
+  refreshDashboard(now);
   delay(1);
 }

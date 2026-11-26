@@ -17,6 +17,11 @@ jobs:
       version: ${{ steps.version.outputs.value }}
     steps:
       - uses: actions/checkout@v4
+      - name: Test GPS display readings
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -I firmware/TrackerOTA \
+            firmware/TrackerOTA/GpsStatus.cpp tests/gps-status.cpp -o "$RUNNER_TEMP/test-gps-status"
+          "$RUNNER_TEMP/test-gps-status"
       - uses: arduino/setup-arduino-cli@v2
         with:
           version: '1.3.1'
@@ -26,6 +31,9 @@ jobs:
         run: |
           arduino-cli core update-index --additional-urls "$ESP32_INDEX"
           arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$ESP32_INDEX"
+      - name: Install display libraries
+        run: |
+          arduino-cli lib install --no-deps 'Adafruit BusIO@1.17.4' 'Adafruit GFX Library@1.12.4' 'Adafruit ST7735 and ST7789 Library@1.11.0'
       - name: Read firmware version
         id: version
         run: |
@@ -51,7 +59,7 @@ jobs:
 
   release:
     needs: build
-    if: github.event_name == 'push' && (github.ref_type == 'tag' || (github.ref == 'refs/heads/main' && needs.build.outputs.version == '1.0.0'))
+    if: github.event_name == 'push' && (github.ref_type == 'tag' || (github.ref == 'refs/heads/main' && github.event.head_commit.message == format('Release firmware v{0}', needs.build.outputs.version)))
     runs-on: ubuntu-24.04
     concurrency:
       group: firmware-release-${{ needs.build.outputs.version }}
