@@ -1,0 +1,62 @@
+name: Build tracker firmware
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: '1.3.1'
+      - name: Install ESP32 board support
+        env:
+          ESP32_INDEX: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+        run: |
+          arduino-cli core update-index --additional-urls "$ESP32_INDEX"
+          arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$ESP32_INDEX"
+      - name: Verify release tag
+        if: github.ref_type == 'tag'
+        run: |
+          version=$(sed -nE 's/^#define TRACKER_VERSION "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' firmware/TrackerOTA/Version.h)
+          test -n "$version" && test "$GITHUB_REF_NAME" = "v$version"
+      - name: Build firmware
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32s3:USBMode=hwcdc,CDCOnBoot=cdc,FlashSize=8M,PartitionScheme=default_8MB \
+            --output-dir "$RUNNER_TEMP/tracker" firmware/TrackerOTA
+          mkdir firmware-artifacts
+          cp "$RUNNER_TEMP/tracker/TrackerOTA.ino.bin" firmware-artifacts/heltec-wireless-tracker-v2-ota.bin
+          cp "$RUNNER_TEMP/tracker/TrackerOTA.ino.merged.bin" firmware-artifacts/heltec-wireless-tracker-v2-usb.bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: heltec-wireless-tracker-v2
+          path: firmware-artifacts/
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: heltec-wireless-tracker-v2
+      - name: Publish the verified build as a GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "Dog Tracker $GITHUB_REF_NAME" --generate-notes --latest \
+            heltec-wireless-tracker-v2-ota.bin heltec-wireless-tracker-v2-usb.bin

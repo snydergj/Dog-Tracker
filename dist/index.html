@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dog Tracker</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <header>
+    <div><p class="subtitle">Heltec Wireless Tracker V2</p><h1>Dog Tracker</h1></div>
+    <span id="source" class="badge" data-active="false">Disconnected</span>
+  </header>
+  <main>
+    <section class="map-panel" aria-label="Tracker map">
+      <div id="map"></div>
+      <p id="map-notice" role="status" hidden></p>
+    </section>
+    <aside aria-label="Tracker controls and GPS readings">
+      <section>
+        <h2>Connection</h2>
+        <p id="connection" role="status">Plug in the tracker with a USB data cable or try the demo.</p>
+        <div class="actions">
+          <button type="button" id="connect">Connect USB</button>
+          <button type="button" id="demo" class="secondary">Try demo</button>
+        </div>
+      </section>
+      <section>
+        <h2>GPS position</h2>
+        <p id="fix" role="status">Waiting for a position.</p>
+        <dl>
+          <div><dt>Latitude</dt><dd id="latitude">—</dd></div>
+          <div><dt>Longitude</dt><dd id="longitude">—</dd></div>
+          <div><dt>Satellites used</dt><dd id="satellites">—</dd></div>
+          <div><dt>Last fix received</dt><dd id="updated">—</dd></div>
+        </dl>
+        <button type="button" id="center" class="secondary" disabled>Center on latest fix</button>
+      </section>
+      <section>
+        <details open>
+          <summary>Serial output</summary>
+          <pre id="log" aria-label="Recent serial lines" tabindex="0">No data received.</pre>
+        </details>
+      </section>
+    </aside>
+  </main>
+</body>
+</html>
