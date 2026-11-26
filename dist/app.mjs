@@ -35,6 +35,7 @@ let lastFixAt = null;
 let fixLost = false;
 let demoTimer;
 let active;
+let setupNoticeAt = 0;
 
 function showConnection(source, message) {
   ui.source.textContent = source;
@@ -57,6 +58,7 @@ function clearTrack() {
 }
 
 function updateFixStatus() {
+  if (setupNoticeAt && Date.now() - setupNoticeAt > 25000) clearWifiSetup();
   const stale = lastFixAt !== null && Date.now() - lastFixAt > 10000;
   const old = !demoTimer && (fixLost || stale);
   marker?.setStyle({ fillColor: old || (!active && !demoTimer) ? '#a06a1b' : '#127550' });
@@ -98,10 +100,29 @@ function showPosition(reading) {
   updateFixStatus();
 }
 
+function clearWifiSetup() {
+  setupNoticeAt = 0;
+  ui['wifi-setup'].hidden = true;
+  ui['setup-network'].textContent = '';
+  ui['setup-password'].textContent = '';
+}
+
 function handleLine(line) {
   const text = line.trim().slice(0, 512);
   if (!text) return;
-  lines.push(text);
+  const setup = text.match(/SETUP Wi-Fi: (DogTracker-[0-9A-F]{6}) \| Password: ([0-9A-F]{16}) \| http:\/\/192\.168\.4\.1\/$/);
+  if (setup) {
+    setupNoticeAt = Date.now();
+    ui['wifi-setup'].hidden = false;
+    ui['setup-network'].textContent = setup[1];
+    ui['setup-password'].textContent = setup[2];
+    ui['device-status'].hidden = true;
+  } else if (/^(?:Wi-Fi connected\.|OTA |SETUP (?:closed|could not start))/.test(text)) {
+    if (text.startsWith('Wi-Fi connected.') || text.startsWith('SETUP ')) clearWifiSetup();
+    ui['device-status'].textContent = text;
+    ui['device-status'].hidden = false;
+  }
+  lines.push(setup ? 'Tracker Wi-Fi setup is available.' : text);
   if (lines.length > 40) lines.shift();
   ui.log.textContent = lines.join('\n');
   ui.log.scrollTop = ui.log.scrollHeight;
@@ -167,7 +188,7 @@ ui.connect.addEventListener('click', async () => {
     active = { reader, stopping: false };
     ui.connect.textContent = 'Disconnect USB';
     ui.connect.disabled = false;
-    showConnection('USB connected', 'Listening at 115200 baud. Open the tracker’s GPS screen and give it a clear view of the sky.');
+    showConnection('USB connected', 'Listening to the tracker at 115200 baud.');
     const decoder = new TextDecoder();
     let pending = '';
     while (true) {
@@ -187,6 +208,8 @@ ui.connect.addEventListener('click', async () => {
     reader?.releaseLock();
     if (opened) await port.close().catch(() => {});
     active = undefined;
+    clearWifiSetup();
+    ui['device-status'].hidden = true;
     ui.connect.textContent = 'Connect USB';
     ui.connect.disabled = ui.demo.disabled = false;
     showConnection('Disconnected', message);

@@ -23,10 +23,19 @@
       <section>
         <h2>Connection</h2>
         <p id="connection" role="status">Plug in the tracker with a USB data cable or try the demo.</p>
+        <p id="device-status" role="status" hidden></p>
         <div class="actions">
           <button type="button" id="connect">Connect USB</button>
           <button type="button" id="demo" class="secondary">Try demo</button>
         </div>
+      </section>
+      <section id="wifi-setup" hidden>
+        <h2>Set up tracker Wi-Fi</h2>
+        <p>Join this temporary Wi-Fi network from your phone, then open <a href="http://192.168.4.1/" target="_blank" rel="noopener noreferrer">192.168.4.1</a>.</p>
+        <dl>
+          <div><dt>Network</dt><dd id="setup-network"></dd></div>
+          <div><dt>Password</dt><dd id="setup-password"></dd></div>
+        </dl>
       </section>
       <section>
         <h2>GPS position</h2>
