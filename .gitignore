@@ -1,3 +1,4 @@
 /.tracker-backups/
 /.tracker-build/
 /firmware/TrackerOTA/build/
+/firmware/TrackerOTA/DashboardAssets.h

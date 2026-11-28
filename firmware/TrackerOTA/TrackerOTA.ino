@@ -1,9 +1,12 @@
 #include <Arduino.h>
+#include <ESPmDNS.h>
 #include <Preferences.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <cJSON.h>
 #include <esp_random.h>
 
+#include "DashboardAssets.h"
 #include "GpsStatus.h"
 #include "TrackerDisplay.h"
 #include "Updater.h"
@@ -17,6 +20,8 @@ constexpr int kUserButton = 0;
 constexpr unsigned long kBaud = 115200;
 constexpr unsigned long kJoinTimeout = 25000;
 constexpr unsigned long kPortalTimeout = 300000;
+constexpr char kDashboardHost[] = "dogtracker";
+constexpr char kDashboardDomain[] = "dogtracker.local";
 
 struct Settings {
   char network[33];
@@ -30,10 +35,12 @@ WebServer portal(80);
 GpsStatus gpsStatus;
 bool connecting = false;
 bool portalOpen = false;
+bool dashboardOpen = false;
 bool checkedForUpdate = false;
 bool buttonHandled = false;
 unsigned long networkStarted;
 unsigned long lastPortalNotice;
+unsigned long lastDashboardNotice;
 unsigned long buttonDown;
 unsigned long restartAt;
 char setupNetwork[24];
@@ -60,7 +67,7 @@ void showForm() {
 }
 
 void saveForm() {
-  if (restartAt || portal.arg("nonce") != formNonce) {
+  if (!portalOpen || restartAt || portal.arg("nonce") != formNonce) {
     portal.send(403, "text/plain", "Reopen the setup page and try again.");
     return;
   }
@@ -89,6 +96,52 @@ void saveForm() {
   portal.sendHeader("Cache-Control", "no-store");
   portal.send(200, "text/plain", "Settings saved. The tracker will restart and join the network.");
   restartAt = millis() + 1500;
+}
+
+bool allowDashboardRequest() {
+  if (!dashboardOpen) {
+    portal.send(404);
+    return false;
+  }
+  // Reject DNS rebinding through unrelated names on the local network.
+  const String host = portal.hostHeader();
+  if (!host.equalsIgnoreCase(kDashboardDomain) && !host.equalsIgnoreCase("dogtracker.local:80") &&
+      host != WiFi.localIP().toString() && host != WiFi.localIP().toString() + ":80") {
+    portal.send(403);
+    return false;
+  }
+  portal.sendHeader("Cache-Control", "no-store");
+  portal.sendHeader("X-Content-Type-Options", "nosniff");
+  return true;
+}
+
+void sendDashboardAsset(const char *type, const char *asset) {
+  if (allowDashboardRequest()) portal.send_P(200, type, asset);
+}
+
+int secondsUtc(uint32_t now) {
+  const time_t systemTime = time(nullptr);
+  return systemTime >= 1700000000 ? static_cast<int>(systemTime % 86400) : gpsStatus.secondsUtc(now);
+}
+
+void sendDashboardStatus() {
+  if (!allowDashboardRequest()) return;
+  const uint32_t now = millis();
+  cJSON *status = cJSON_CreateObject();
+  char body[256];
+  const bool ready = status && cJSON_AddStringToObject(status, "gga", gpsStatus.latestGga(now)) &&
+      cJSON_AddNumberToObject(status, "utc", secondsUtc(now)) &&
+      cJSON_AddNumberToObject(status, "chipC", temperatureRead()) &&
+      cJSON_AddStringToObject(status, "version", TRACKER_VERSION) &&
+      cJSON_PrintPreallocated(status, body, sizeof(body), false);
+  cJSON_Delete(status);
+  if (ready) portal.send(200, "application/json", body);
+  else portal.send(503);
+}
+
+void printDashboardNotice() {
+  Serial.printf("Dashboard: http://%s/\n", WiFi.localIP().toString().c_str());
+  lastDashboardNotice = millis();
 }
 
 void startPortal() {
@@ -132,15 +185,27 @@ void serviceNetwork() {
       portalOpen = false;
       Serial.println("SETUP closed. Hold USER for three seconds to reopen it.");
     }
-  } else if (connecting && WiFi.status() == WL_CONNECTED) {
-    connecting = false;
-    Serial.println("Wi-Fi connected.");
-    if (!checkedForUpdate) {
-      checkedForUpdate = true;
-      if (xTaskCreate(updateTask, "OTA", 12288, nullptr, 1, nullptr) != pdPASS) {
-        Serial.println("OTA could not start.");
+  } else if (WiFi.status() == WL_CONNECTED) {
+    if (!dashboardOpen) {
+      connecting = false;
+      Serial.println("Wi-Fi connected.");
+      portal.begin();
+      dashboardOpen = true;
+      if (MDNS.begin(kDashboardHost)) MDNS.addService("http", "tcp", 80);
+      printDashboardNotice();
+      if (!checkedForUpdate) {
+        checkedForUpdate = true;
+        if (xTaskCreate(updateTask, "OTA", 12288, nullptr, 1, nullptr) != pdPASS) {
+          Serial.println("OTA could not start.");
+        }
       }
     }
+    portal.handleClient();
+    if (millis() - lastDashboardNotice >= 15000) printDashboardNotice();
+  } else if (dashboardOpen) {
+    portal.stop();
+    MDNS.end();
+    dashboardOpen = false;
   } else if (connecting && now - networkStarted >= kJoinTimeout) {
     startPortal();
   }
@@ -160,13 +225,11 @@ void refreshDashboard(uint32_t now) {
   if (now - drawnAt < 1000) return;
   drawnAt = now;
 
-  const time_t systemTime = time(nullptr);
-  const int utc = systemTime >= 1700000000 ? static_cast<int>(systemTime % 86400) : gpsStatus.secondsUtc(now);
   DisplayNetwork network = DisplayNetwork::Offline;
   if (portalOpen) network = DisplayNetwork::Setup;
   else if (connecting) network = DisplayNetwork::Joining;
   else if (WiFi.status() == WL_CONNECTED) network = DisplayNetwork::Connected;
-  drawTrackerDisplay({utc, gpsStatus.satellites(now), gpsStatus.hasFix(now), temperatureRead(), network});
+  drawTrackerDisplay({secondsUtc(now), gpsStatus.satellites(now), gpsStatus.hasFix(now), temperatureRead(), network});
 }
 }
 
@@ -185,13 +248,22 @@ void setup() {
   if (storage.getBytesLength("settings") == sizeof(settings)) storage.getBytes("settings", &settings, sizeof(settings));
   const bool forceSetup = storage.getBool("setup", false);
   if (forceSetup) storage.remove("setup");
-  portal.on("/", HTTP_GET, showForm);
+  portal.on("/", HTTP_GET, [] {
+    if (portalOpen) showForm();
+    else sendDashboardAsset("text/html; charset=utf-8", dashboard::kIndex);
+  });
   portal.on("/setup", HTTP_POST, saveForm);
+  portal.on("/style.css", HTTP_GET, [] { sendDashboardAsset("text/css; charset=utf-8", dashboard::kStyle); });
+  portal.on("/app.mjs", HTTP_GET, [] { sendDashboardAsset("text/javascript; charset=utf-8", dashboard::kApp); });
+  portal.on("/gps.mjs", HTTP_GET, [] { sendDashboardAsset("text/javascript; charset=utf-8", dashboard::kGps); });
+  portal.on("/geofence.mjs", HTTP_GET, [] { sendDashboardAsset("text/javascript; charset=utf-8", dashboard::kGeofence); });
+  portal.on("/api/status", HTTP_GET, sendDashboardStatus);
   WiFi.persistent(false);
   if (forceSetup || !settings.network[0]) {
     startPortal();
   } else {
     WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
     WiFi.begin(settings.network, settings.password);
     networkStarted = millis();
     connecting = true;

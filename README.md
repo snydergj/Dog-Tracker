@@ -8,13 +8,19 @@ Use **Street** or **Satellite** in the top-right corner of the map. Satellite vi
 
 `firmware/TrackerOTA` is the Wi-Fi and OTA firmware. It still streams GPS to the USB map. A one-time USB install is needed to switch from `TrackerBench` to `TrackerOTA` and install the 8 MB layout with two app slots. In Arduino IDE, use **ESP32S3 Dev Module**, **Flash Size → 8MB**, **Partition Scheme → 8M with spiffs (3MB APP/1.5MB SPIFFS)**, **USB Mode → Hardware CDC and JTAG**, and **USB CDC On Boot → Enabled**. The GitHub Actions USB image is a merged flash image for address `0x0`. The smaller OTA image is for the updater.
 
-The onboard dashboard shows UTC time, GPS fix status, satellites used, Wi-Fi status, and the firmware version. `CHIP C` is the ESP32-S3's internal temperature in Celsius. For an Arduino IDE build, install **Adafruit ST7735 and ST7789 Library**, **Adafruit GFX Library**, and **Adafruit BusIO**. The workflow pins the tested versions.
+The onboard dashboard shows UTC time, GPS fix status, satellites used, Wi-Fi status, and the firmware version. `CHIP C` is the ESP32-S3's internal temperature in Celsius. For an Arduino IDE build, first run `node firmware/embed-dashboard.mjs` from the repository root to embed the current web app. Install **Adafruit ST7735 and ST7789 Library**, **Adafruit GFX Library**, and **Adafruit BusIO**. The workflow pins the tested versions and embeds the web app automatically.
 
 1. Connect USB and look for **Set up tracker Wi-Fi** on the map. It shows the tracker-specific network name and its randomly generated password. A separate serial monitor at 115200 baud can also read the `SETUP Wi-Fi` line. The setup network closes after five minutes. To reopen it, hold **USER** for three seconds while the tracker is running.
 2. Join that temporary network from a phone or computer and open `http://192.168.4.1/`. Enter a **2.4 GHz** Wi-Fi network name and password. The tracker saves them and restarts.
 3. Leave the GitHub token blank for public releases. If the [Dog-Tracker repository](https://github.com/snydergj/Dog-Tracker) is private, generate a [fine-grained GitHub token](https://github.com/settings/personal-access-tokens/new) restricted to that repository with **Contents: Read-only** and enter it directly into setup. The device stores its settings in local flash. Revoke the token if the tracker is lost, and reprovision it when the token expires.
 
 GitHub Actions builds the firmware for changes to `main`, pull requests, and version tags. To publish a device update, increment `TRACKER_VERSION` in `firmware/TrackerOTA/Version.h`. Push the matching tag or push to `main` with the exact commit message `Release firmware v<version>` (for example, `Release firmware v1.0.1`). Routine commits build without publishing. On boot, the tracker checks for a newer release after Wi-Fi and clock sync. It downloads via HTTPS, compares the file's SHA-256 with GitHub's release metadata, and activates the other app slot after verifying the complete image. Keep the tracker powered through the update. Updates only need Wi-Fi at boot, and the GPS-to-map bench connection still uses USB.
+
+## Open the tracker dashboard on a phone
+
+With firmware **v1.0.3** or later, put the phone and the Heltec on the same trusted Wi-Fi network. Open [http://dogtracker.local/](http://dogtracker.local/) in the phone browser. If that name does not resolve, connect USB to the desktop app and look under **Connection** for the numeric dashboard address. The serial monitor also prints `Dashboard: http://…/` every 15 seconds while Wi-Fi is connected.
+
+The Heltec serves the dashboard directly and reports live GPS, UTC time, satellite count, chip temperature and firmware version. Street and satellite tiles still need internet access on the phone. The trail is recorded while the page is open, and the geofence is saved in that browser. The dashboard uses local HTTP and is accessible to devices on the same network. Keep it off the public internet.
 
 ## Start the app
 

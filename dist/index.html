@@ -28,12 +28,13 @@
         <h2>Connection</h2>
         <p id="connection" role="status">Plug in the tracker with a USB data cable or try the demo.</p>
         <p id="device-status" role="status" hidden></p>
-        <div class="actions">
+        <p id="dashboard-address" hidden><a id="dashboard-link" target="_blank" rel="noopener noreferrer">Open Wi-Fi dashboard</a></p>
+        <div class="actions usb-only">
           <button type="button" id="connect">Connect USB</button>
           <button type="button" id="demo" class="secondary">Try demo</button>
         </div>
       </section>
-      <section id="wifi-setup" hidden>
+      <section id="wifi-setup" class="usb-only" hidden>
         <h2>Set up tracker Wi-Fi</h2>
         <p>Join this temporary Wi-Fi network from your phone, then open <a href="http://192.168.4.1/" target="_blank" rel="noopener noreferrer">192.168.4.1</a>.</p>
         <dl>
@@ -49,6 +50,9 @@
           <div><dt>Longitude</dt><dd id="longitude">—</dd></div>
           <div><dt>Satellites used</dt><dd id="satellites">—</dd></div>
           <div><dt>Last fix received</dt><dd id="updated">—</dd></div>
+          <div class="tracker-only"><dt>Tracker time (UTC)</dt><dd id="tracker-time">—</dd></div>
+          <div class="tracker-only"><dt>Chip temperature</dt><dd id="chip-temperature">—</dd></div>
+          <div class="tracker-only"><dt>Firmware</dt><dd id="firmware-version">—</dd></div>
         </dl>
         <button type="button" id="center" class="secondary" disabled>Center on latest fix</button>
       </section>
@@ -64,7 +68,7 @@
           <button type="button" id="remove-fence" class="secondary" hidden>Remove fence</button>
         </div>
       </section>
-      <section>
+      <section class="usb-only">
         <details open>
           <summary>Serial output</summary>
           <pre id="log" aria-label="Recent serial lines" tabindex="0">No data received.</pre>

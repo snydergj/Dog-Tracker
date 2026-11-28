@@ -8,12 +8,14 @@ class GpsStatus {
   int satellites(uint32_t now) const;
   bool hasFix(uint32_t now) const;
   int secondsUtc(uint32_t now) const;
+  const char *latestGga(uint32_t now) const;
 
  private:
   void parse(uint32_t now);
   bool current(uint32_t now) const;
 
   char sentence_[128]{};
+  char latestGga_[128]{};
   unsigned length_ = 0;
   int satellites_ = -1;
   bool fix_ = false;

@@ -11,6 +11,7 @@ h1, h2, p { margin: 0; }
 h1 { font-size: clamp(2rem, 4vw, 3.25rem); line-height: 1.1; letter-spacing: -.045em; }
 h2, summary { font-size: 1.05rem; font-weight: 700; }
 .subtitle { color: #435c53; margin-bottom: .25rem; font-size: .9rem; }
+html[data-tracker-web] .usb-only, html:not([data-tracker-web]) .tracker-only { display: none; }
 .badge { background: #e0e7e3; padding: .35rem .75rem; border-radius: 2rem; white-space: nowrap; font-size: .875rem; }
 .badge[data-active="true"] { background: #c9e9d9; color: #144632; }
 main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 23rem); gap: 1rem; }

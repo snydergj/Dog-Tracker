@@ -61,10 +61,13 @@ void GpsStatus::parse(uint32_t now) {
   unsigned parity = 0;
   for (const char *letter = sentence_ + 1; letter < checksum; ++letter) parity ^= *letter;
   if (parity != static_cast<unsigned>(high * 16 + low)) return;
-  *checksum = '\0';
 
+  char fieldsBuffer[128];
+  const size_t payloadLength = checksum - (sentence_ + 7);
+  memcpy(fieldsBuffer, sentence_ + 7, payloadLength);
+  fieldsBuffer[payloadLength] = '\0';
   char *fields[7];
-  fields[0] = sentence_ + 7;
+  fields[0] = fieldsBuffer;
   for (unsigned index = 1; index < 7; ++index) {
     char *comma = strchr(fields[index - 1], ',');
     if (!comma) return;
@@ -78,6 +81,7 @@ void GpsStatus::parse(uint32_t now) {
   fix_ = quality > 0;
   satellites_ = count;
   fixReceivedAt_ = now;
+  memcpy(latestGga_, sentence_, length_ + 1);
   const int gpsTime = parseTime(fields[0]);
   if (fix_ && gpsTime >= 0) {
     clockSeconds_ = gpsTime;
@@ -95,6 +99,10 @@ int GpsStatus::satellites(uint32_t now) const {
 
 bool GpsStatus::hasFix(uint32_t now) const {
   return current(now) && fix_;
+}
+
+const char *GpsStatus::latestGga(uint32_t now) const {
+  return current(now) ? latestGga_ : "";
 }
 
 int GpsStatus::secondsUtc(uint32_t now) const {

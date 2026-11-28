@@ -57,6 +57,7 @@ const demonstration = [
   [41.91542, -87.63355], [41.91575, -87.63304], [41.91623, -87.63276],
 ];
 const serialSupported = 'serial' in navigator;
+const trackerWeb = document.documentElement.hasAttribute('data-tracker-web');
 const lines = [];
 const trail = [];
 let marker;
@@ -65,6 +66,7 @@ let lastFixAt = null;
 let fixLost = false;
 let demoTimer;
 let active;
+let wifiOnline = false;
 let setupNoticeAt = 0;
 const fenceStorageKey = 'dog-tracker:geofence';
 const fenceCrossings = trackFenceCrossings();
@@ -141,7 +143,7 @@ function finishFenceEdit() {
   renderFence();
   resetFenceMonitor();
   const fresh = !fixLost && lastFixAt !== null && Date.now() - lastFixAt <= 10000;
-  if ((demoTimer || (active && fresh)) && trail.length) evaluateFence(trail.at(-1));
+  if ((demoTimer || ((active || wifiOnline) && fresh)) && trail.length) evaluateFence(trail.at(-1));
 }
 
 ui['draw-fence'].addEventListener('click', () => {
@@ -220,14 +222,15 @@ function updateFixStatus() {
   if (setupNoticeAt && Date.now() - setupNoticeAt > 25000) clearWifiSetup();
   const stale = lastFixAt !== null && Date.now() - lastFixAt > 10000;
   const old = !demoTimer && (fixLost || stale);
-  if (!demoTimer && (!active || old || lastFixAt === null)) resetFenceMonitor();
-  marker?.setStyle({ fillColor: old || (!active && !demoTimer) ? '#a06a1b' : '#127550' });
+  const live = active || wifiOnline;
+  if (!demoTimer && (!live || old || lastFixAt === null)) resetFenceMonitor();
+  marker?.setStyle({ fillColor: old || (!live && !demoTimer) ? '#a06a1b' : '#127550' });
   if (lastFixAt === null) {
     ui.fix.textContent = fixLost ? 'GPS is searching for satellites. Try a clear view of the sky.' : 'Waiting for a position.';
   } else if (demoTimer) {
     ui.fix.textContent = 'Simulated GPS fix';
-  } else if (!active) {
-    ui.fix.textContent = 'Last known position · USB disconnected';
+  } else if (!live) {
+    ui.fix.textContent = `Last known position · ${trackerWeb ? 'tracker unreachable' : 'USB disconnected'}`;
   } else {
     ui.fix.textContent = old ? 'Last known position · awaiting a fresh fix' : 'GPS position received';
   }
@@ -272,12 +275,18 @@ function handleLine(line) {
   const text = line.trim().slice(0, 512);
   if (!text) return;
   const setup = text.match(/SETUP Wi-Fi: (DogTracker-[0-9A-F]{6}) \| Password: ([0-9A-F]{16}) \| http:\/\/192\.168\.4\.1\/$/);
+  const dashboard = text.match(/^Dashboard: (http:\/\/(?:\d{1,3}\.){3}\d{1,3}\/)$/);
   if (setup) {
     setupNoticeAt = Date.now();
     ui['wifi-setup'].hidden = false;
     ui['setup-network'].textContent = setup[1];
     ui['setup-password'].textContent = setup[2];
     ui['device-status'].hidden = true;
+    ui['dashboard-address'].hidden = true;
+  } else if (dashboard) {
+    ui['dashboard-link'].href = dashboard[1];
+    ui['dashboard-link'].textContent = dashboard[1];
+    ui['dashboard-address'].hidden = false;
   } else if (/^(?:Wi-Fi connected\.|OTA |SETUP (?:closed|could not start))/.test(text)) {
     if (text.startsWith('Wi-Fi connected.') || text.startsWith('SETUP ')) clearWifiSetup();
     ui['device-status'].textContent = text;
@@ -371,6 +380,7 @@ ui.connect.addEventListener('click', async () => {
     active = undefined;
     clearWifiSetup();
     ui['device-status'].hidden = true;
+    ui['dashboard-address'].hidden = true;
     ui.connect.textContent = 'Connect USB';
     ui.connect.disabled = ui.demo.disabled = false;
     showConnection('Disconnected', message);
@@ -378,7 +388,36 @@ ui.connect.addEventListener('click', async () => {
   }
 });
 
-if (!serialSupported) {
+async function pollTracker() {
+  try {
+    const response = await fetch('/api/status', { cache: 'no-store', signal: AbortSignal.timeout(3500) });
+    if (!response.ok) throw new Error(`Tracker status ${response.status}`);
+    const { gga, utc, chipC, version } = await response.json();
+    const reading = parseGpsLine(gga);
+    wifiOnline = true;
+    showConnection('Wi-Fi connected', 'Receiving updates directly from the tracker.');
+    ui['tracker-time'].textContent = utc >= 0 ? new Date(utc * 1000).toISOString().slice(11, 19) : '—';
+    ui['chip-temperature'].textContent = Number.isFinite(chipC) ? `${chipC.toFixed(1)} °C` : '—';
+    ui['firmware-version'].textContent = `v${version}`;
+    if (reading) showPosition(reading);
+    else {
+      ui.satellites.textContent = '—';
+      showPosition({ hasFix: false, satellites: null });
+    }
+  } catch {
+    wifiOnline = false;
+    showConnection('Disconnected', 'Tracker unreachable. Reconnecting…');
+    for (const key of ['satellites', 'tracker-time', 'chip-temperature']) ui[key].textContent = '—';
+    updateFixStatus();
+  } finally {
+    setTimeout(pollTracker, 1500);
+  }
+}
+
+if (trackerWeb) {
+  showConnection('Connecting…', 'Waiting for the tracker to respond.');
+  pollTracker();
+} else if (!serialSupported) {
   ui.connect.disabled = true;
   showConnection('Disconnected', 'Open this page in desktop Chrome or Edge to connect over USB.');
 }
